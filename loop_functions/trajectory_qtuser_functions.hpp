@@ -1,5 +1,7 @@
 #pragma once
 
+#include <argos3/core/simulator/simulator.h>
+#include <argos3/core/simulator/loop_functions.h>
 #include <argos3/plugins/simulator/visualizations/qt-opengl/qtopengl_user_functions.h>
 #include <argos3/plugins/robots/pi-puck/simulator/pipuck_entity.h>
 #include "trajectory_loop_functions.hpp"

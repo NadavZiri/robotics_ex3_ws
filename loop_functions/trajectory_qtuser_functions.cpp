@@ -1,6 +1,4 @@
 #include "trajectory_qtuser_functions.hpp"
-#include <argos3/core/simulator/simulator.h>
-#include <argos3/core/simulator/loop_functions.h>
 
 using namespace argos;
 

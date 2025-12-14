@@ -1,3 +1,5 @@
+find_package(Qt5 REQUIRED COMPONENTS Widgets OpenGL)
+
 set(SRC
     trajectory_loop_functions.cpp
     trajectory_loop_functions.hpp
@@ -12,6 +14,6 @@ target_link_libraries(loop_functions
   PUBLIC
     argos3core_${ARGOS_BUILD_FOR}
     argos3plugin_${ARGOS_BUILD_FOR}_pipuck
-    Qt6::Widgets
-    Qt6::OpenGLWidgets
+    Qt5::Widgets
+    Qt5::OpenGL
 )
