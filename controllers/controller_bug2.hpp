@@ -21,6 +21,28 @@ namespace argos {
 
       void ControlStep() override;
 
+      bool isObstacleDetected();
+
+      void goToGoal();
+
+      void circumvanteObstacle();
+
+      bool obstacleToMyLeft();
+
+      bool obstacleToMyRight();
+
+      bool isOnLine();
+
+      void traceObstacle();
+
+      enum EState {
+         STATE_GO_TO_GOAL,
+         STATE_CIRCUMNAVIGATE_OBSTACLE,
+         STATE_TRACE_OBSTACLE,
+         STOP
+      };
+
+
    private:
       
       /* Sensors and Actuators */
@@ -31,5 +53,11 @@ namespace argos {
       CCI_PiPuckSystemSensor* m_pcSystem = nullptr;
       CCI_PositioningSensor* m_pcPositioning = nullptr;
       CVector3 m_cTargetPosition;
+      CVector3 startPosition;
+      CVector3 obstacleStartPosition;
+      EState m_eState;
+      Real line_angle;
+      Real threshold_distance;
+
    };
 }
