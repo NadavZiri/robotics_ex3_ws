@@ -50,13 +50,10 @@ namespace argos {
             break;
          case EBug1State::FINISHED:
             m_pcWheels->SetLinearVelocity(0.0, 0.0);
-            m_pcColoredLEDs->SetAllColors(CColor::GREEN);
             break;
       }
    }
 void ControllerBug1::AlignToTarget() {
-
-   m_pcColoredLEDs->SetAllColors(CColor::BLUE);
 
    // current position
    CVector3 currentPos = m_pcPositioning->GetReading().Position;
@@ -72,8 +69,7 @@ void ControllerBug1::AlignToTarget() {
    cZ.UnsignedNormalize();
 
    // target direction angle
-   Real line_angle = ATan2(toTarget.GetY(), toTarget.GetX());
-   CRadians target_angle = CRadians(line_angle);
+   CRadians target_angle = ATan2(toTarget.GetY(), toTarget.GetX());
 
    // angle error
    CRadians cAngleError = target_angle - cZ;
@@ -91,17 +87,17 @@ void ControllerBug1::AlignToTarget() {
    bool ControllerBug1::IsObstacleAhead(){
       const Real OBSTACLE_THRESHOLD = 0.2; 
 
-      for(const auto& reading : m_pcRangefinders->GetReadings()) {
-         if(reading.Value < OBSTACLE_THRESHOLD) {
-            return true;
-         }
-      }
+    for(const auto& it : m_pcRangefinders->GetReadingsMap()) {
+   if(it.second.Value < OBSTACLE_THRESHOLD) {
+      return true;
+   }
+}
+
       return false;
    }
 
    void ControllerBug1::MoveStraight(){
 
-      m_pcColoredLEDs->SetAllColors(CColor::BLUE);
 
       if(IsObstacleAhead()) {
          CVector3 currentPos = m_pcPositioning->GetReading().Position;
@@ -124,26 +120,25 @@ void ControllerBug1::AlignToTarget() {
 
 void ControllerBug1::FollowObstacle(){
 
-   m_pcColoredLEDs->SetAllColors(CColor::YELLOW);
-
    const Real fLinearSpeed = 0.4;
    const Real fTurnSpeed   = 0.3;
 
-   const auto& readings = m_pcRangefinders->GetReadings();
+   const auto& readings = m_pcRangefinders->GetReadingsMap();
 
-   Real rightMin = 1.0;
+   Real minDist = 1.0;
 
-   for(size_t i = readings.size() / 2; i < readings.size(); ++i) {
-      rightMin = Min(rightMin, readings[i].Value);
+   for(const auto& it : readings) {
+      minDist = Min(minDist, it.second.Value);
    }
 
-   if(rightMin < 0.15) {
+   if(minDist < 0.15) {
       m_pcWheels->SetLinearVelocity(fLinearSpeed,
                                     fLinearSpeed + fTurnSpeed);
    } else {
       m_pcWheels->SetLinearVelocity(fLinearSpeed + fTurnSpeed,
                                     fLinearSpeed);
    }
+
 
    CVector3 currentPos3D = m_pcPositioning->GetReading().Position;
    CVector2 cPos(currentPos3D.GetX(), currentPos3D.GetY());
@@ -165,7 +160,6 @@ void ControllerBug1::FollowObstacle(){
 }
 void ControllerBug1::GoToBestPoint(){
 
-   m_pcColoredLEDs->SetAllColors(CColor::YELLOW);
 
    CVector3 currentPos3D = m_pcPositioning->GetReading().Position;
    CVector2 cPos(currentPos3D.GetX(), currentPos3D.GetY());
