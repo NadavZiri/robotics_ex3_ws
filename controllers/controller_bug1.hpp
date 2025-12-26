@@ -8,7 +8,7 @@
 #include <argos3/plugins/robots/generic/control_interface/ci_positioning_sensor.h>
 #include <argos3/core/utility/math/vector3.h>
 #include <argos3/core/utility/math/vector2.h>
-#include <argos3/core/utility/math/radians.h>
+// #include <argos3/core/utility/math/radians.h>
 
 namespace argos {
 
@@ -49,9 +49,12 @@ namespace argos {
       Real m_fBestDist; // Distance to the target at the best point
       bool m_bCompletedLoop; // Flag to indicate if a full loop around the obstacle has been completed
 
-      void GoToTarget();
       bool IsObstacleAhead();
       void MoveTowards(const CVector2& cDir);
+      void AlignToTarget();
+      void MoveStraight();
+      void FollowObstacle();
+      void GoToBestPoint();
 
 
 };

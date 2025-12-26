@@ -54,25 +54,38 @@ namespace argos {
             break;
       }
    }
-   void ControllerBug1::AlignToTarget() {
+void ControllerBug1::AlignToTarget() {
 
-      m_pcColoredLEDs->SetAllColors(CColor::BLUE);
+   m_pcColoredLEDs->SetAllColors(CColor::BLUE);
 
-      CVector3 currentPos = m_pcPositioning->GetReading().Position;
-      CVector2 cPos(currentPos.GetX(), currentPos.GetY());
-      CVector2 cTarget(m_cTargetPosition.GetX(), m_cTargetPosition.GetY());
-      CVector2 toTarget = cTarget - cPos;
+   // current position
+   CVector3 currentPos = m_pcPositioning->GetReading().Position;
+   CVector2 cPos(currentPos.GetX(), currentPos.GetY());
 
-      CRadians cAngleError = toTarget.Angle();
-      cAngleError.SignedNormalize();
+   // target position
+   CVector2 cTarget(m_cTargetPosition.GetX(), m_cTargetPosition.GetY());
+   CVector2 toTarget = cTarget - cPos;
 
-      const Real fThreshold = 0.05; 
+   
+   CRadians cZ, cY, cX;
+   m_pcPositioning->GetReading().Orientation.ToEulerAngles(cZ, cY, cX);
+   cZ.UnsignedNormalize();
 
-      if(Abs(cAngleError.GetValue()) > fThreshold) {
-         m_pcWheels->SetLinearVelocity(-0.05, 0.05);
-      } else {
-         m_eState = EBug1State::MOVE_STRAIGHT;
-      }
+   // target direction angle
+   Real line_angle = ATan2(toTarget.GetY(), toTarget.GetX());
+   CRadians target_angle = CRadians(line_angle);
+
+   // angle error
+   CRadians cAngleError = target_angle - cZ;
+   cAngleError.SignedNormalize();
+
+   const Real fThreshold = 0.05;
+
+   if(Abs(cAngleError.GetValue()) > fThreshold) {
+      m_pcWheels->SetLinearVelocity(-0.05, 0.05);
+   } else {
+      m_eState = EBug1State::MOVE_STRAIGHT;
+   }
 }
 
    bool ControllerBug1::IsObstacleAhead(){
@@ -159,13 +172,23 @@ void ControllerBug1::GoToBestPoint(){
 
    CVector2 toBest = m_cBestPoint - cPos;
 
-   CRadians angle = toBest.Angle();
-   angle.SignedNormalize();
+   CRadians cZ, cY, cX;
+   m_pcPositioning->GetReading().Orientation.ToEulerAngles(cZ, cY, cX);
+   cZ.UnsignedNormalize();
+
+   Real line_angle = ATan2(toBest.GetY(), toBest.GetX());
+   CRadians target_angle = CRadians(line_angle);
+
+   CRadians angle_error = target_angle - cZ;
+   angle_error.SignedNormalize();
+
+   Real fAngular = fAngularGain * angle_error.GetValue();
+
 
    const Real fAngularGain = 2.0;
    const Real fLinearSpeed = 0.4;
 
-   Real fAngular = fAngularGain * angle.GetValue();
+
 
    m_pcWheels->SetLinearVelocity(
       fLinearSpeed - fAngular,
