@@ -39,8 +39,8 @@ namespace argos {
       enum class EBug1State {
          ALIGN_TO_TARGET,
          MOVE_STRAIGHT,
-         // FOLLOW_OBSTACLE,
-         // GO_TO_BEST_POINT,
+         FOLLOW_OBSTACLE,
+         GO_TO_BEST_POINT,
          FINISHED
       };
       EBug1State m_eState; 
