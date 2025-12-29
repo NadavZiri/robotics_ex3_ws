@@ -48,6 +48,8 @@ namespace argos
          STOP
       };
 
+      int closestAngle();
+
    private:
       /* Sensors and Actuators */
       CCI_PiPuckDifferentialDriveActuator *m_pcWheels = nullptr;

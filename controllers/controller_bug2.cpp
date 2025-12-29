@@ -80,7 +80,7 @@ namespace argos
         if (isObstacleDetected() && abs(cZ.GetValue() - target_angle.GetValue()) < threshold_distance)
         {
             m_eState = STATE_CIRCUMNAVIGATE_OBSTACLE;
-            
+
             return;
         }
         if (abs(cZ.GetValue() - target_angle.GetValue()) > threshold_distance)
@@ -90,14 +90,24 @@ namespace argos
         }
         else
         {
-            // move forward
-            m_pcWheels->SetLinearVelocity(0.1, 0.1);
+            Real proximity = getSensorProximity(0);
+            Real desired_distance = 0.05;
+            Real error = desired_distance - proximity;
+            m_errorSum += error;
+            Real derivative = error - m_lastError;
+            Real control_signal = m_fKp * error + m_fKi * m_errorSum + m_fKd * derivative;
+            m_lastError = error;
+            Real base_speed = 0.1;
+            Real left_speed = base_speed - control_signal;
+            Real right_speed = base_speed - control_signal;
+            LOG << "Left Speed: " << left_speed << " Right Speed: " << right_speed << std::endl;
+            m_pcWheels->SetLinearVelocity(left_speed, right_speed);
         }
     }
 
     void ControllerBug2::circumvanteObstacle()
     {
-        bool obstacle = obstacleToMyLeft();
+        bool obstacle = abs(getSensorProximity(5) - 0.05) < threshold_distance;
         if (obstacle)
         {
             m_eState = STATE_TRACE_OBSTACLE;
@@ -108,7 +118,18 @@ namespace argos
         else
         {
             // turn left
-            m_pcWheels->SetLinearVelocity(-0.05, 0.05);
+            Real proximity = getSensorProximity(5);
+            Real desired_distance = 0.05; // 5 cm
+            Real error = desired_distance - proximity;
+            m_errorSum += error;
+            Real derivative = error - m_lastError;
+            Real control_signal = m_fKp * error + m_fKi * m_errorSum + m_fKd * derivative;
+            m_lastError = error;
+            Real base_speed = 0.05;
+            Real left_speed = -base_speed + control_signal;
+            Real right_speed = base_speed - control_signal;
+            LOG << "Circumventing Obstacle - Left Speed: " << left_speed << " Right Speed: " << right_speed << std::endl;
+            m_pcWheels->SetLinearVelocity(left_speed, right_speed);
         }
     }
 
@@ -120,27 +141,11 @@ namespace argos
             abs(m_pcPositioning->GetReading().Position.GetY() - obstacleStartPosition.GetY()) > 0.1)
         {
             m_eState = STATE_GO_TO_GOAL;
-            
+
             return;
         }
-        // if (isObstacleDetected())
-        // {
-        //     // obstacle still in front, keep tracing
-        //     m_pcWheels->SetLinearVelocity(-0.05, 0.05);
-        //     return;
-        // }
-        // if (obstacleToMyLeft())
-        // {
-        //     // keep moving forward
-        //     m_pcWheels->SetLinearVelocity(0.1, 0.1);
-        // }
-        // else
-        // {
-        //     // turn left
-        //     m_pcWheels->SetLinearVelocity(-0.05, 0.05);
-        // }
         Real proximity = getSensorProximity(6);
-        Real desired_distance = 0.05; // 5 cm
+        Real desired_distance = 0.05;
         Real error = desired_distance - proximity;
         m_errorSum += error;
         Real derivative = error - m_lastError;
@@ -201,7 +206,8 @@ namespace argos
         const CVector3 b = m_cTargetPosition;
         const CVector3 ab = b - a;
         const Real ab_len2 = ab.SquareLength();
-        if(ab_len2 < 1e-6) return true; // degenerate case
+        if (ab_len2 < 1e-6)
+            return true; // degenerate case
         const Real t_raw = ((p - a).DotProduct(ab)) / ab_len2;
         const Real t = std::max<Real>(0.0, std::min<Real>(1.0, t_raw));
         const CVector3 proj = a + t * ab;
@@ -230,6 +236,26 @@ namespace argos
                 proximity = sensor.Proximity;
             } });
         return proximity;
+    }
+
+    int ControllerBug2::closestAngle()
+    {
+        CRadians cZ, cY, cX;
+        m_pcPositioning->GetReading().Orientation.ToEulerAngles(cZ, cY, cX);
+        cZ.UnsignedNormalize();
+        CRadians target_angle = CRadians(line_angle);
+        target_angle.UnsignedNormalize();
+        Real min_diff = std::numeric_limits<Real>::max();
+        int closest_index = -1;
+        for (size_t i = 0; i < 4; i++)
+        {
+            if (abs(cZ.GetValue() - target_angle.GetValue() + i * CRadians::PI_OVER_TWO.GetValue()) < min_diff)
+            {
+                min_diff = abs(cZ.GetValue() - target_angle.GetValue() + i * CRadians::PI_OVER_TWO.GetValue());
+                closest_index = i;
+            }
+        }
+        return closest_index;
     }
     /****************************************/
     /****************************************/
