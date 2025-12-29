@@ -29,6 +29,7 @@ namespace argos
         line_angle = atan2(targetY - startPosition.GetY(), targetX - startPosition.GetX());
         threshold_distance = 0.05; // 5 cm
         m_eState = STATE_GO_TO_GOAL;
+        m_pcColoredLEDs->SetRingLEDs(CColor::BLUE);
     }
 
     void ControllerBug2::ControlStep()
@@ -48,6 +49,7 @@ namespace argos
             break;
         case STOP:
             m_pcWheels->SetLinearVelocity(0.0, 0.0);
+            m_pcColoredLEDs->SetRingLEDs(CColor::GREEN);
             break;
         }
     }
@@ -80,7 +82,7 @@ namespace argos
         if (isObstacleDetected() && abs(cZ.GetValue() - target_angle.GetValue()) < threshold_distance)
         {
             m_eState = STATE_CIRCUMNAVIGATE_OBSTACLE;
-
+            m_pcColoredLEDs->SetRingLEDs(CColor::YELLOW);
             return;
         }
         if (abs(cZ.GetValue() - target_angle.GetValue()) > threshold_distance)
@@ -140,8 +142,8 @@ namespace argos
         if (onLine && abs(m_pcPositioning->GetReading().Position.GetX() - obstacleStartPosition.GetX()) > 0.1 &&
             abs(m_pcPositioning->GetReading().Position.GetY() - obstacleStartPosition.GetY()) > 0.1)
         {
+            m_pcColoredLEDs->SetRingLEDs(CColor::BLUE);
             m_eState = STATE_GO_TO_GOAL;
-
             return;
         }
         Real proximity = getSensorProximity(6);
