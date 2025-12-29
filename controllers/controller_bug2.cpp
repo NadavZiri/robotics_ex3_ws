@@ -101,7 +101,7 @@ namespace argos
         if (obstacle)
         {
             m_eState = STATE_TRACE_OBSTACLE;
-            
+            m_errorSum = 0;
             obstacleStartPosition = m_pcPositioning->GetReading().Position;
             return;
         }
@@ -123,22 +123,33 @@ namespace argos
             
             return;
         }
-        if (isObstacleDetected())
-        {
-            // obstacle still in front, keep tracing
-            m_pcWheels->SetLinearVelocity(-0.05, 0.05);
-            return;
-        }
-        if (obstacleToMyLeft())
-        {
-            // keep moving forward
-            m_pcWheels->SetLinearVelocity(0.1, 0.1);
-        }
-        else
-        {
-            // turn left
-            m_pcWheels->SetLinearVelocity(-0.05, 0.05);
-        }
+        // if (isObstacleDetected())
+        // {
+        //     // obstacle still in front, keep tracing
+        //     m_pcWheels->SetLinearVelocity(-0.05, 0.05);
+        //     return;
+        // }
+        // if (obstacleToMyLeft())
+        // {
+        //     // keep moving forward
+        //     m_pcWheels->SetLinearVelocity(0.1, 0.1);
+        // }
+        // else
+        // {
+        //     // turn left
+        //     m_pcWheels->SetLinearVelocity(-0.05, 0.05);
+        // }
+        Real proximity = getSensorProximity(6);
+        Real desired_distance = 0.05; // 5 cm
+        Real error = desired_distance - proximity;
+        m_errorSum += error;
+        Real derivative = error - m_lastError;
+        Real control_signal = m_fKp * error + m_fKi * m_errorSum + m_fKd * derivative;
+        m_lastError = error;
+        Real base_speed = 0.1;
+        Real left_speed = base_speed + control_signal;
+        Real right_speed = base_speed - control_signal;
+        m_pcWheels->SetLinearVelocity(left_speed, right_speed);
     }
 
     bool ControllerBug2::isObstacleDetected()
@@ -197,6 +208,28 @@ namespace argos
         const Real dist = (p - proj).Length();
 
         return dist < threshold_distance;
+    }
+
+    Real ControllerBug2::getLeftProximity()
+    {
+        Real leftProximity = 0.0;
+        m_pcRangefinders->Visit([&leftProximity](const auto &sensor)
+                                {
+            if (sensor.Label == 5 || sensor.Label == 6) {
+                leftProximity += sensor.Proximity;
+            } });
+        return leftProximity; // average
+    }
+
+    Real ControllerBug2::getSensorProximity(UInt8 sensorLabel)
+    {
+        Real proximity = 0.0;
+        m_pcRangefinders->Visit([&proximity, sensorLabel](const auto &sensor)
+                                {
+            if (sensor.Label == sensorLabel) {
+                proximity = sensor.Proximity;
+            } });
+        return proximity;
     }
     /****************************************/
     /****************************************/
