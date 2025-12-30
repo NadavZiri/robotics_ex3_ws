@@ -1,3 +1,4 @@
+/* 211388921 Nadav Ziri & 212497564 Shirel Ben Baruch */
 #include "controller_bug1.hpp"
 
 namespace argos
