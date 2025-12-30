@@ -41,19 +41,22 @@ namespace argos
       {
          m_nLeaveTimer--;
       }
-      LOG << "Current State: " << m_eState << std::endl;
       switch (m_eState)
       {
       case STATE_GO_TO_GOAL:
+         m_pcColoredLEDs->SetRingLEDs(CColor::BLUE);
          GoToGoal();
          break;
       case STATE_ALIGN_TO_OBSTACLE:
+         m_pcColoredLEDs->SetRingLEDs(CColor::YELLOW);
          AlignToGoal();
          break;
       case STATE_FOLLOW_OBSTACLE:
+         m_pcColoredLEDs->SetRingLEDs(CColor::YELLOW);
          FollowObstacle();
          break;
       case STATE_GO_TO_CLOSEST_POINT:
+         m_pcColoredLEDs->SetRingLEDs(CColor::GREEN);
          GoToClosestPoint();
          break;
       case STOP:
@@ -129,7 +132,6 @@ namespace argos
    void ControllerBug1::AlignToGoal()
    {
       bool obstacle = abs(getSensorProximity(5) - 0.05) < m_fThresholdDistance;
-      LOG << "Aligning to Obstacle - Sensor 5 Proximity: " << getSensorProximity(5) << std::endl;
       if (obstacle)
       {
          m_eState = STATE_FOLLOW_OBSTACLE;
@@ -146,7 +148,6 @@ namespace argos
       Real base_speed = 0.05;
       Real left_speed = -base_speed + control_signal;
       Real right_speed = base_speed - control_signal;
-      LOG << "Circumventing Obstacle - Left Speed: " << left_speed << " Right Speed: " << right_speed << std::endl;
       m_pcWheels->SetLinearVelocity(left_speed, right_speed);
    }
 
@@ -172,22 +173,6 @@ namespace argos
    // follow wall helper function
    void ControllerBug1::FollowWallOnly()
    {
-      // if(ObstacleInFront()) {
-      //    LOG << "LEFT SPEED: -0.05, RIGHT SPEED: 0.05" << std::endl;
-      //    m_pcWheels->SetLinearVelocity(-0.05, 0.05); // turn left
-      // }
-      // else if(ObstacleOnLeft()) {
-      //    LOG << "LEFT SPEED: 0.1, RIGHT SPEED: 0.1" << std::endl;
-      //    m_pcWheels->SetLinearVelocity(0.1, 0.1);    // drive forward
-      // }
-      // else if(ObstacleOnRight()) {
-      //    LOG << "LEFT SPEED: 0.05, RIGHT SPEED: 0.02" << std::endl;
-      //    m_pcWheels->SetLinearVelocity(0.05, 0.02);  // turn right
-      // }
-      // else {
-      //    LOG << "LEFT SPEED: 0.03, RIGHT SPEED: 0.06" << std::endl;
-      //    m_pcWheels->SetLinearVelocity(0.03, 0.06);  // look for wall
-      // }
       Real proximity = getSensorProximity(6);
       Real desired_distance = 0.05;
       Real error = desired_distance - proximity;
@@ -198,7 +183,6 @@ namespace argos
       Real base_speed = 0.1;
       Real left_speed = base_speed + control_signal;
       Real right_speed = base_speed - control_signal;
-      LOG << "LEFT SPEED: " << left_speed << ", RIGHT SPEED: " << right_speed << std::endl;
       m_pcWheels->SetLinearVelocity(left_speed, right_speed);
    }
 
@@ -301,7 +285,6 @@ namespace argos
       LOG << abs(cZ.GetValue() - targetAngle.GetValue()) << std::endl;
       if (abs(cZ.GetValue() - targetAngle.GetValue()) > m_fThresholdDistance*2)
       {
-         LOG << "LEFT SPEED: 0.05, RIGHT SPEED: -0.05" << std::endl;
          m_pcWheels->SetLinearVelocity(0.05, -0.05);
       }
       else
