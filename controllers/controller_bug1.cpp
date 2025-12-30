@@ -1,11 +1,13 @@
 #include "controller_bug1.hpp"
 
-namespace argos {
+namespace argos
+{
 
    /****************************************/
    /****************************************/
 
-   void ControllerBug1::Init(TConfigurationNode& t_tree) {
+   void ControllerBug1::Init(TConfigurationNode &t_tree)
+   {
       m_pcWheels = GetActuator<CCI_PiPuckDifferentialDriveActuator>("pipuck_differential_drive");
       m_pcColoredLEDs = GetActuator<CCI_PiPuckColorLEDsActuator>("pipuck_leds");
       m_pcSystem = GetSensor<CCI_PiPuckSystemSensor>("pipuck_system");
@@ -15,7 +17,7 @@ namespace argos {
       m_pcPositioning = GetSensor<CCI_PositioningSensor>("positioning");
       m_pcPositioning->Enable();
 
-      TConfigurationNode& tTargetNode = GetNode(t_tree, "target_position");
+      TConfigurationNode &tTargetNode = GetNode(t_tree, "target_position");
       Real targetX, targetY;
       GetNodeAttribute(tTargetNode, "x", targetX);
       GetNodeAttribute(tTargetNode, "y", targetY);
@@ -28,98 +30,137 @@ namespace argos {
       m_fPrevDistToClosest = 1e9;
       m_bLeftHitPoint = false;
       m_eState = STATE_GO_TO_GOAL;
-
    }
 
    /****************************************/
 
-   void ControllerBug1::ControlStep() {
+   void ControllerBug1::ControlStep()
+   {
       // update timer when switching states
-      if(m_nLeaveTimer > 0) {
+      if (m_nLeaveTimer > 0)
+      {
          m_nLeaveTimer--;
       }
-
-      switch(m_eState) {
-         case STATE_GO_TO_GOAL:
-            GoToGoal();
-            break;
-         case STATE_FOLLOW_OBSTACLE:
-            FollowObstacle();
-            break;
-         case STATE_GO_TO_CLOSEST_POINT:
-            GoToClosestPoint();
-            break;
-         case STOP:
-            m_pcWheels->SetLinearVelocity(0.0, 0.0);
-            break;
+      LOG << "Current State: " << m_eState << std::endl;
+      switch (m_eState)
+      {
+      case STATE_GO_TO_GOAL:
+         GoToGoal();
+         break;
+      case STATE_ALIGN_TO_OBSTACLE:
+         AlignToGoal();
+         break;
+      case STATE_FOLLOW_OBSTACLE:
+         FollowObstacle();
+         break;
+      case STATE_GO_TO_CLOSEST_POINT:
+         GoToClosestPoint();
+         break;
+      case STOP:
+         m_pcWheels->SetLinearVelocity(0.0, 0.0);
+         break;
       }
    }
 
+   // go to goal state
+   void ControllerBug1::GoToGoal()
+   {
+      // if target reached, stop
+      if (IsTargetReached())
+      {
+         LOG << "Target Reached!" << std::endl;
+         m_eState = STOP;
+         return;
+      }
+      if (IsObstacleDetected() && m_nLeaveTimer <= 0)
+      {
+         // initialize obstacle following variables for new obstacle
+         m_bLeftHitPoint = false;
+         m_cObstacleHitPoint = m_pcPositioning->GetReading().Position;
+         m_cClosestPointToGoal = m_cObstacleHitPoint;
+         m_fClosestDistanceToGoal = DistanceToGoal(m_cObstacleHitPoint);
 
-// go to goal state
-void ControllerBug1::GoToGoal() {
-   // if target reached, stop
-   if(IsTargetReached()) {
-      m_eState = STOP;
-      return;
+         // reset previous closest distance
+         m_fPrevDistToClosest = 1e9;
+
+         m_eState = STATE_ALIGN_TO_OBSTACLE;
+         return;
+      }
+
+      // move towards goal
+      MoveTowardsTarget();
    }
-
-   if(IsObstacleDetected() && m_nLeaveTimer <= 0) {
-      // initialize obstacle following variables for new obstacle
-      m_bLeftHitPoint = false;               
-      m_cObstacleHitPoint = m_pcPositioning->GetReading().Position;
-      m_cClosestPointToGoal = m_cObstacleHitPoint;
-      m_fClosestDistanceToGoal = DistanceToGoal(m_cObstacleHitPoint);
-      
-      // reset previous closest distance
-      m_fPrevDistToClosest = 1e9; 
-
-      m_eState = STATE_FOLLOW_OBSTACLE;
-      return;
-   }
-
-   // move towards goal
-   MoveTowardsTarget();
-}
 
    // follow obstacle state
-void ControllerBug1::FollowObstacle() {
-   CVector3 currentPos = m_pcPositioning->GetReading().Position;
-   Real distToGoal = DistanceToGoal(currentPos);
+   void ControllerBug1::FollowObstacle()
+   {
+      CVector3 currentPos = m_pcPositioning->GetReading().Position;
+      Real distToGoal = DistanceToGoal(currentPos);
 
-   if(distToGoal < m_fClosestDistanceToGoal) {
-      m_fClosestDistanceToGoal = distToGoal;
-      m_cClosestPointToGoal = currentPos;
+      if (distToGoal < m_fClosestDistanceToGoal)
+      {
+         m_fClosestDistanceToGoal = distToGoal;
+         m_cClosestPointToGoal = currentPos;
+      }
+
+      Real distFromHit = (currentPos - m_cObstacleHitPoint).Length();
+
+      if (!m_bLeftHitPoint)
+      {
+         if (distFromHit > 0.10)
+         {
+            m_bLeftHitPoint = true;
+            LOG << "Robot left hit point area of the current obstacle." << std::endl;
+         }
+      }
+      else
+      {
+         if (distFromHit < 0.1)
+         {
+            LOG << "Full loop complete on current obstacle!" << std::endl;
+            m_eState = STATE_GO_TO_CLOSEST_POINT;
+            return;
+         }
+      }
+
+      FollowWallOnly();
    }
 
-   Real distFromHit = (currentPos - m_cObstacleHitPoint).Length();
-
-   if(!m_bLeftHitPoint) {
-      if(distFromHit > 0.10) { 
-         m_bLeftHitPoint = true;
-         LOG << "Robot left hit point area of the current obstacle." << std::endl;
+   void ControllerBug1::AlignToGoal()
+   {
+      bool obstacle = abs(getSensorProximity(5) - 0.05) < m_fThresholdDistance;
+      LOG << "Aligning to Obstacle - Sensor 5 Proximity: " << getSensorProximity(5) << std::endl;
+      if (obstacle)
+      {
+         m_eState = STATE_FOLLOW_OBSTACLE;
+         m_errorSum = 0;
+         return;
       }
-   } 
-   else {
-      if(distFromHit < 0.1) { 
-          LOG << "Full loop complete on current obstacle!" << std::endl;
-          m_eState = STATE_GO_TO_CLOSEST_POINT;
-          return;
-      }
+      Real proximity = getSensorProximity(5);
+      Real desired_distance = 0.05; // 5 cm
+      Real error = desired_distance - proximity;
+      m_errorSum += error;
+      Real derivative = error - m_lastError;
+      Real control_signal = m_fKp * error + m_fKi * m_errorSum + m_fKd * derivative;
+      m_lastError = error;
+      Real base_speed = 0.05;
+      Real left_speed = -base_speed + control_signal;
+      Real right_speed = base_speed - control_signal;
+      LOG << "Circumventing Obstacle - Left Speed: " << left_speed << " Right Speed: " << right_speed << std::endl;
+      m_pcWheels->SetLinearVelocity(left_speed, right_speed);
    }
-
-   FollowWallOnly();
-}
 
    // go to closest point state
-   void ControllerBug1::GoToClosestPoint() {
+   void ControllerBug1::GoToClosestPoint()
+   {
       // set current position with positioning sensor
       CVector3 currentPos = m_pcPositioning->GetReading().Position;
       // variable for distance to closest point
       Real d = (currentPos - m_cClosestPointToGoal).Length();
-   
+
       // if reached closest point to goal, switch to go to goal state
-      if(d < 0.08) {
+      if (d < 0.08)
+      {
          m_nLeaveTimer = 150; // timer to avoid immediate re-detection of the obstacle
          m_eState = STATE_GO_TO_GOAL;
          return;
@@ -129,81 +170,127 @@ void ControllerBug1::FollowObstacle() {
    }
 
    // follow wall helper function
-   void ControllerBug1::FollowWallOnly() {
-      if(ObstacleInFront()) {
-         m_pcWheels->SetLinearVelocity(-0.05, 0.05); // turn left
-      }
-      else if(ObstacleOnLeft()) {
-         m_pcWheels->SetLinearVelocity(0.1, 0.1);    // drive forward
-      }
-      else if(ObstacleOnRight()) {
-         m_pcWheels->SetLinearVelocity(0.05, 0.02);  // turn right
-      }
-      else {
-         m_pcWheels->SetLinearVelocity(0.03, 0.06);  // look for wall
-      }
+   void ControllerBug1::FollowWallOnly()
+   {
+      // if(ObstacleInFront()) {
+      //    LOG << "LEFT SPEED: -0.05, RIGHT SPEED: 0.05" << std::endl;
+      //    m_pcWheels->SetLinearVelocity(-0.05, 0.05); // turn left
+      // }
+      // else if(ObstacleOnLeft()) {
+      //    LOG << "LEFT SPEED: 0.1, RIGHT SPEED: 0.1" << std::endl;
+      //    m_pcWheels->SetLinearVelocity(0.1, 0.1);    // drive forward
+      // }
+      // else if(ObstacleOnRight()) {
+      //    LOG << "LEFT SPEED: 0.05, RIGHT SPEED: 0.02" << std::endl;
+      //    m_pcWheels->SetLinearVelocity(0.05, 0.02);  // turn right
+      // }
+      // else {
+      //    LOG << "LEFT SPEED: 0.03, RIGHT SPEED: 0.06" << std::endl;
+      //    m_pcWheels->SetLinearVelocity(0.03, 0.06);  // look for wall
+      // }
+      Real proximity = getSensorProximity(6);
+      Real desired_distance = 0.05;
+      Real error = desired_distance - proximity;
+      m_errorSum += error;
+      Real derivative = error - m_lastError;
+      Real control_signal = m_fKp * error + m_fKi * m_errorSum + m_fKd * derivative;
+      m_lastError = error;
+      Real base_speed = 0.1;
+      Real left_speed = base_speed + control_signal;
+      Real right_speed = base_speed - control_signal;
+      LOG << "LEFT SPEED: " << left_speed << ", RIGHT SPEED: " << right_speed << std::endl;
+      m_pcWheels->SetLinearVelocity(left_speed, right_speed);
+   }
+
+   Real ControllerBug1::getSensorProximity(UInt8 sensorLabel)
+   {
+      Real proximity = 0.0;
+      m_pcRangefinders->Visit([&proximity, sensorLabel](const auto &sensor)
+                              {
+            if (sensor.Label == sensorLabel) {
+                proximity = sensor.Proximity;
+            } });
+      return proximity;
    }
 
    // obstacle detection helper function
-   bool ControllerBug1::IsObstacleDetected() {
+   bool ControllerBug1::IsObstacleDetected()
+   {
       return ObstacleInFront();
    }
 
    // obstacle position helper functions
-   bool ControllerBug1::ObstacleInFront() {
-      bool detected = false;
-      // check front sensors (0 and 7)
-      m_pcRangefinders->Visit([&detected](const auto& sensor) {
-         if((sensor.Label == 0 || sensor.Label == 7) && 
-            sensor.Proximity < std::get<3>(sensor.Configuration))
-            detected = true;
-      });
-      return detected;
+   bool ControllerBug1::ObstacleInFront()
+   {
+      bool obstacleDetected = false;
+      std::function<void(const CCI_PiPuckRangefindersSensor::SInterface &)> fCheckSensor =
+          [&obstacleDetected](const auto &sensor)
+      {
+         const auto &[id, pos, ori, range] = sensor.Configuration;
+         if (sensor.Label != 0 && sensor.Label != 7)
+            return; // only front sensors are considered
+         if (sensor.Proximity < range / 2)
+         {
+            obstacleDetected = true;
+         }
+      };
+
+      // visit each sensor reading, modifying obstacleDetected if any of the front sensors detected
+      m_pcRangefinders->Visit(fCheckSensor);
+      return obstacleDetected;
    }
 
    // obstacle position helper functions
-   bool ControllerBug1::ObstacleOnLeft() {
+   bool ControllerBug1::ObstacleOnLeft()
+   {
       bool detected = false;
-      m_pcRangefinders->Visit([&detected](const auto& sensor) {
+      m_pcRangefinders->Visit([&detected](const auto &sensor)
+                              {
          if((sensor.Label == 5 || sensor.Label == 6) && 
             sensor.Proximity < std::get<3>(sensor.Configuration))
-            detected = true;
-      });
+            detected = true; });
       return detected;
    }
 
    // obstacle position helper functions
-   bool ControllerBug1::ObstacleOnRight() {
+   bool ControllerBug1::ObstacleOnRight()
+   {
       bool detected = false;
-      m_pcRangefinders->Visit([&detected](const auto& sensor) {
+      m_pcRangefinders->Visit([&detected](const auto &sensor)
+                              {
          if((sensor.Label == 1 || sensor.Label == 2) && 
             sensor.Proximity < std::get<3>(sensor.Configuration))
-            detected = true;
-      });
+            detected = true; });
       return detected;
    }
 
    // target reached helper function
-   bool ControllerBug1::IsTargetReached() {
-      const auto& blobs = m_pcCamera->GetReadings();
-      for(const auto& blob : blobs.BlobList) {
-         if(blob->Color == CColor::CYAN) return true;
+   bool ControllerBug1::IsTargetReached()
+   {
+      const auto &blobs = m_pcCamera->GetReadings();
+      for (const auto &blob : blobs.BlobList)
+      {
+         if (blob->Color == CColor::CYAN)
+            return true;
       }
       return false;
    }
 
    // distance to goal helper function
-   Real ControllerBug1::DistanceToGoal(const CVector3& pos) {
+   Real ControllerBug1::DistanceToGoal(const CVector3 &pos)
+   {
       return (pos - m_cTargetPosition).Length();
    }
 
    // move towards target helper function
-   void ControllerBug1::MoveTowardsTarget() {
+   void ControllerBug1::MoveTowardsTarget()
+   {
       MoveTowardsPoint(m_cTargetPosition);
    }
 
    // move towards point helper function
-   void ControllerBug1::MoveTowardsPoint(const CVector3& point) {
+   void ControllerBug1::MoveTowardsPoint(const CVector3 &point)
+   {
       CRadians cZ, cY, cX;
       m_pcPositioning->GetReading().Orientation.ToEulerAngles(cZ, cY, cX);
       CVector3 pos = m_pcPositioning->GetReading().Position;
@@ -211,14 +298,16 @@ void ControllerBug1::FollowObstacle() {
       CRadians targetAngle(angle);
       cZ.UnsignedNormalize();
       targetAngle.UnsignedNormalize();
-
-      if(Abs(cZ.GetValue() - targetAngle.GetValue()) > m_fThresholdDistance) {
+      LOG << abs(cZ.GetValue() - targetAngle.GetValue()) << std::endl;
+      if (abs(cZ.GetValue() - targetAngle.GetValue()) > m_fThresholdDistance*2)
+      {
+         LOG << "LEFT SPEED: 0.05, RIGHT SPEED: -0.05" << std::endl;
          m_pcWheels->SetLinearVelocity(0.05, -0.05);
       }
-      else {
+      else
+      {
          m_pcWheels->SetLinearVelocity(0.1, 0.1);
       }
    }
-
    REGISTER_CONTROLLER(ControllerBug1, "controller_bug1");
 }
