@@ -81,7 +81,7 @@
         <!-- robot -->
         <pipuck id="pipuck0" led_medium="leds">
             <body position="3.00,3.10,0"/>
-            <controller config="controller_bug2"/>
+            <controller config="controller_bug1"/>
         </pipuck>
 
     </arena>
